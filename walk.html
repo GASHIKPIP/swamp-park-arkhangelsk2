@@ -1,0 +1,812 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Прогулка по болотному парку</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Serif:wght@400;700&display=swap">
+<style>
+/* Полноэкранная сцена, поверх неё — приборная панель из тёмной хвои с матовым золотом (одинаковая в обеих темах, потому что лежит на 3D-кадре).
+   Стартовый экран и справка следуют теме зрителя. */
+:root {
+  --bg: #EEF0E9; --surface: #F8F8F3; --fg: #13241D; --muted: #55665C; --line: #CBD3C8; --accent: #1F5A44; --accent-fg: #FFFFFF; --gold: #9C7A36;
+  --scene: #0E1A16;
+  --hud: rgba(14, 36, 29, .86); --hud-solid: #0E241D; --hud-2: rgba(21, 52, 41, .92); --hud-fg: #F1EAD7; --hud-muted: #B4C3B0; --hud-line: rgba(209, 180, 110, .28); --hud-gold: #D1B46E; --hud-gold-fg: #13241D;
+  --head: 'Golos Text', 'Segoe UI', system-ui, sans-serif;
+  --display: 'PT Serif', Georgia, 'Times New Roman', serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0E241D; --surface: #153429; --fg: #F1EAD7; --muted: #B4C3B0; --line: #355142; --accent: #D1B46E; --accent-fg: #13241D; --gold: #D1B46E; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #0E241D; --surface: #153429; --fg: #F1EAD7; --muted: #B4C3B0; --line: #355142; --accent: #D1B46E; --accent-fg: #13241D; --gold: #D1B46E; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body { background: var(--scene); color: var(--hud-fg); font: 14px/1.45 var(--head); -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--hud-gold); outline-offset: 2px; }
+#app { position: fixed; inset: 0; overflow: hidden; }
+#view, #pano { position: absolute; inset: 0; }
+#view canvas { cursor: grab; }
+#view.drag canvas { cursor: grabbing; }
+#pano { background: var(--scene); }
+.p3-labels, .p3-zonelabels { display: none; }
+#fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+#fade.on { opacity: 1; }
+
+/* ---------- верхняя панель */
+.top { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 10px max(12px, env(safe-area-inset-left, 0px)); pointer-events: none; background: linear-gradient(rgba(8, 20, 16, .55), rgba(8, 20, 16, 0)); }
+.top > * { pointer-events: auto; }
+.hbtn { text-decoration: none; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--hud-line); background: var(--hud); color: var(--hud-fg); font-weight: 500; white-space: nowrap; backdrop-filter: blur(6px); }
+.hbtn:hover { border-color: var(--hud-gold); }
+.hbtn[aria-pressed="true"] { background: var(--hud-gold); color: var(--hud-gold-fg); border-color: var(--hud-gold); }
+.hbtn svg { width: 16px; height: 16px; flex: none; }
+.ibtn { width: 36px; padding: 0; justify-content: center; }
+.where { min-width: 0; display: flex; flex-direction: column; line-height: 1.15; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
+.where b { font-family: var(--display); font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.where span { font-size: 12px; color: var(--hud-muted); font-variant-numeric: tabular-nums; }
+.compass { flex: 1; display: flex; justify-content: center; min-width: 0; }
+.cstrip { position: relative; width: min(340px, 100%); height: 30px; border-radius: 15px; background: var(--hud); border: 1px solid var(--hud-line); overflow: hidden; }
+.cstrip i { position: absolute; top: 0; height: 100%; display: flex; align-items: center; transform: translateX(-50%); font-style: normal; font-size: 12px; color: var(--hud-muted); font-variant-numeric: tabular-nums; }
+.cstrip i.c { color: var(--hud-fg); font-weight: 700; }
+.cstrip i.n { color: var(--hud-gold); }
+.cstrip::after { content: ''; position: absolute; left: 50%; top: 3px; bottom: 3px; width: 2px; margin-left: -1px; background: var(--hud-gold); border-radius: 1px; }
+.tools { display: flex; gap: 6px; }
+
+/* ---------- мини-карта */
+#minibox { position: absolute; right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 6px; border-radius: 12px; background: var(--hud); border: 1px solid var(--hud-line); cursor: pointer; }
+#mini { display: block; width: 220px; height: 137px; border-radius: 7px; }
+#minibox small { position: absolute; left: 12px; top: 8px; font-size: 11px; color: var(--hud-muted); pointer-events: none; }
+
+/* ---------- карточка ближайшего места */
+#card { position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: min(380px, calc(100% - 24px)); border-radius: 12px; background: var(--hud); border: 1px solid var(--hud-line); overflow: hidden; backdrop-filter: blur(6px); }
+#card .ph { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; max-width: 100%; background: var(--hud-solid); }
+#card .bd { padding: 10px 14px 12px; display: grid; gap: 6px; }
+#card .ey { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--hud-gold); }
+#card h2 { margin: 0; font-family: var(--display); font-size: 19px; line-height: 1.2; text-wrap: balance; }
+#card p { margin: 0; color: var(--hud-fg); opacity: .92; font-size: 13.5px; }
+#card.compact p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#card .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.cbtn { height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid var(--hud-line); background: var(--hud-2); color: var(--hud-fg); font-size: 13px; }
+.cbtn.pri { background: var(--hud-gold); color: var(--hud-gold-fg); border-color: var(--hud-gold); font-weight: 600; }
+.cbtn:hover { border-color: var(--hud-gold); }
+
+/* ---------- полоса маршрута */
+#routebar { position: absolute; left: 0; right: 0; margin-inline: auto; width: fit-content; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 22px; background: var(--hud); border: 1px solid var(--hud-gold); max-width: calc(100% - 24px); }
+#routebar .rt { min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+#routebar .rt b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#routebar .rt span { font-size: 11.5px; color: var(--hud-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+#routebar .prog { width: 80px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .15); overflow: hidden; flex: none; }
+#routebar .prog i { display: block; height: 100%; width: 0; background: var(--hud-gold); }
+
+/* ---------- действия и подсказка */
+#actbar { position: absolute; left: 0; right: 0; margin-inline: auto; width: fit-content; max-width: calc(100% - 24px); flex-wrap: wrap; justify-content: center; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 8px; }
+#hint { position: absolute; left: 50%; top: calc(64px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 6px 14px; border-radius: 16px; background: var(--hud); border: 1px solid var(--hud-line); font-size: 13px; white-space: nowrap; transition: opacity .4s; }
+#cross { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(241, 234, 215, .65); box-shadow: 0 0 0 1px rgba(0, 0, 0, .35); pointer-events: none; }
+
+/* ---------- джойстик (сенсорные экраны) */
+#joy { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: 128px; height: 128px; border-radius: 50%; background: rgba(14, 36, 29, .45); border: 1px solid var(--hud-line); touch-action: none; }
+#joy i { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: var(--hud-gold); opacity: .85; box-shadow: 0 2px 8px rgba(0, 0, 0, .4); }
+#joy span { position: absolute; inset: auto 0 -20px; text-align: center; font-size: 11px; color: var(--hud-muted); }
+
+/* ---------- панели */
+.panel { position: absolute; top: calc(58px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); width: min(360px, calc(100% - 24px)); max-height: calc(100% - 140px); overflow: auto; border-radius: 12px; background: var(--hud); border: 1px solid var(--hud-line); padding: 14px; display: grid; gap: 10px; backdrop-filter: blur(8px); }
+.panel h3 { margin: 0; font-family: var(--display); font-size: 18px; }
+.panel .sub { margin: -6px 0 0; color: var(--hud-muted); font-size: 12.5px; }
+.route { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--hud-line); background: var(--hud-2); text-align: left; }
+.route:hover { border-color: var(--hud-gold); }
+.route b { font-size: 15px; }
+.route span { font-size: 12.5px; color: var(--hud-muted); }
+.route em { font-style: normal; font-size: 12px; color: var(--hud-gold); font-variant-numeric: tabular-nums; }
+.seg { display: grid; gap: 6px; }
+.seg label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--hud-muted); }
+.seg div { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---------- большая карта */
+#bigmap { position: absolute; inset: 0; background: rgba(6, 16, 12, .78); display: flex; align-items: center; justify-content: center; padding: calc(60px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+#bigmap .wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 12px; width: min(1180px, 100%); max-height: 100%; }
+#bigmap .mapc { position: relative; min-width: 0; border-radius: 12px; overflow: hidden; background: var(--hud-solid); border: 1px solid var(--hud-line); }
+#big { display: block; width: 100%; height: auto; cursor: crosshair; }
+#bigmap .list { min-width: 0; overflow: auto; max-height: min(640px, calc(100vh - 100px)); display: grid; gap: 4px; align-content: start; padding: 10px; border-radius: 12px; background: var(--hud); border: 1px solid var(--hud-line); }
+#bigmap .list h3 { margin: 2px 4px 6px; font-family: var(--display); font-size: 17px; }
+#bigmap .list button { text-align: left; padding: 6px 8px; border: 0; border-radius: 8px; background: transparent; font-size: 13px; display: flex; gap: 8px; align-items: baseline; }
+#bigmap .list button:hover { background: var(--hud-2); }
+#bigmap .list button i { font-style: normal; color: var(--hud-gold); font-size: 11px; font-variant-numeric: tabular-nums; min-width: 34px; }
+#bigmap .note { position: absolute; left: 10px; bottom: 8px; font-size: 12px; color: var(--hud-muted); pointer-events: none; text-shadow: 0 1px 2px #000; }
+
+/* ---------- панорамы: соседние точки */
+#hop { position: absolute; left: 0; right: 0; margin-inline: auto; width: fit-content; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: min(760px, calc(100% - 260px)); }
+.hop { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 8px; border-radius: 17px; border: 1px solid var(--hud-line); background: var(--hud); color: var(--hud-fg); font-size: 13px; }
+.hop svg { width: 18px; height: 18px; transition: transform .15s; color: var(--hud-gold); }
+.hop small { color: var(--hud-muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- стартовый экран (по теме зрителя) */
+#start { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: calc(16px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: rgba(8, 18, 14, .55); overflow: auto; }
+#start .box { width: min(760px, 100%); max-height: 100%; overflow: auto; background: var(--bg); color: var(--fg); border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 20px 60px rgba(0, 0, 0, .45); padding: 22px 24px; display: grid; gap: 16px; }
+#start .ey { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); font-weight: 600; }
+#start h1 { margin: 0; font-family: var(--display); font-size: clamp(26px, 4vw, 36px); line-height: 1.1; text-wrap: balance; }
+#start p { margin: 0; color: var(--muted); max-width: 62ch; }
+#start .keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px 18px; font-size: 13px; }
+#start .keys div { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; min-width: 0; }
+kbd { display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); border-bottom-width: 2px; background: var(--surface); font: 600 12px/1.5 var(--head); text-align: center; color: var(--fg); }
+#start .starts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+#start .sbtn { text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); display: grid; gap: 2px; }
+#start .sbtn b { font-size: 14px; }
+#start .sbtn span { font-size: 12px; color: var(--muted); }
+#start .sbtn:hover, #start .sbtn.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+#start .go { justify-self: start; height: 44px; padding: 0 22px; border-radius: 22px; border: 0; background: var(--accent); color: var(--accent-fg); font-weight: 600; font-size: 15px; }
+#start .lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+#start .msg { padding: 10px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); color: var(--fg); font-size: 13px; }
+#loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--hud-muted); font-size: 14px; }
+
+@media (max-width: 760px) {
+  .where b { font-size: 15px; }
+  .compass { display: none; }
+  .hbtn .tx { display: none; }
+  .hbtn { padding: 0 10px; }
+  #mini { width: 150px; height: 93px; }
+  #minibox { top: calc(56px + env(safe-area-inset-top, 0px)); bottom: auto; }
+  #card { top: calc(56px + env(safe-area-inset-top, 0px)); bottom: auto; width: calc(100% - 192px); }
+  #card .ph { display: none; }
+  #card h2 { font-size: 16px; }
+  #card p { font-size: 12.5px; }
+  #card .bd { padding: 8px 10px 10px; }
+  #routebar { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+  #actbar { bottom: calc(196px + env(safe-area-inset-bottom, 0px)); }
+  #bigmap .wrap { grid-template-columns: 1fr; }
+  #bigmap .list { max-height: 34vh; }
+  #hop { max-width: calc(100% - 24px); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 460px) {
+  #card { width: calc(100% - 24px); top: calc(160px + env(safe-area-inset-top, 0px)); }
+  .top { gap: 6px; }
+  .hbtn { height: 32px; } .ibtn, .tools .hbtn { width: 32px; padding: 0; justify-content: center; }
+  .where span { display: none; } .where b { font-size: 14px; }
+  #bFull { display: none; }
+  #routebar { width: auto; left: 12px; right: 12px; flex-wrap: wrap; border-radius: 14px; padding: 8px; }
+  #routebar .rt { flex: 1 1 100%; padding-left: 4px; } #routebar .prog { flex: 1 1 auto; }
+  .hop { height: auto; min-height: 34px; padding-block: 4px; }
+}
+@media (prefers-reduced-motion: reduce) { #fade, .hop svg, #hint { transition: none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="view"></div>
+  <div id="pano" hidden></div>
+  <div id="cross" hidden></div>
+  <div id="fade"></div>
+  <header class="top">
+    <a class="hbtn" id="back" href="index.html"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3 5 8l5 5"/></svg><span class="tx">К книге проекта</span></a>
+    <div class="where"><b id="zone">Болотный парк</b><span id="coord">Архангельск</span></div>
+    <div class="compass"><div class="cstrip" id="cstrip" aria-hidden="true"></div></div>
+    <div class="tools">
+      <button class="hbtn" id="bRoutes" type="button" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="3.5" cy="12.5" r="1.8"/><circle cx="12.5" cy="3.5" r="1.8"/><path d="M5 12h4.5a2.5 2.5 0 0 0 0-5h-3a2.5 2.5 0 0 1 0-5H11"/></svg><span class="tx">Маршруты</span></button>
+      <button class="hbtn" id="bMap" type="button" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1.5 3.5 5.5 2l5 1.5 4-1.5v10.5l-4 1.5-5-1.5-4 1.5z"/><path d="M5.5 2v10.5M10.5 3.5V14"/></svg><span class="tx">Карта</span></button>
+      <button class="hbtn" id="bPano" type="button" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="8" cy="8" rx="6.5" ry="3.2"/><circle cx="8" cy="8" r="1.4"/></svg><span class="tx">Панорамы</span></button>
+      <button class="hbtn ibtn" id="bEnv" type="button" aria-pressed="false" aria-label="Время года, время суток, скорость"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6 13 13M3 13l1.4-1.4M11.6 4.4 13 3"/></svg></button>
+      <button class="hbtn ibtn" id="bHelp" type="button" aria-label="Управление"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6.5"/><path d="M6.2 6.2a1.9 1.9 0 1 1 2.6 1.8c-.5.2-.8.6-.8 1.1v.6"/><circle cx="8" cy="11.6" r=".6" fill="currentColor"/></svg></button>
+      <button class="hbtn ibtn" id="bFull" type="button" aria-label="Во весь экран"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
+    </div>
+  </header>
+  <div id="hint" hidden></div>
+  <aside id="card" class="compact" hidden aria-live="polite">
+    <img class="ph" id="cardImg" alt="" hidden>
+    <div class="bd">
+      <div class="ey" id="cardEy">Рядом</div>
+      <h2 id="cardT"></h2>
+      <p id="cardX"></p>
+      <div class="row" id="cardRow"></div>
+    </div>
+  </aside>
+  <div id="actbar"></div>
+  <div id="routebar" hidden>
+    <div class="rt"><b id="rtT"></b><span id="rtS"></span></div>
+    <div class="prog"><i id="rtP"></i></div>
+    <button class="cbtn" id="rtPause" type="button">Пауза</button>
+    <button class="cbtn" id="rtNext" type="button">Дальше</button>
+    <button class="cbtn" id="rtSpeed" type="button" aria-label="Скорость автопрогулки">×2</button>
+    <button class="cbtn" id="rtStop" type="button" aria-label="Закончить маршрут">✕</button>
+  </div>
+  <div id="minibox" role="button" tabindex="0" aria-label="Открыть карту парка"><canvas id="mini" width="440" height="274"></canvas><small>карта · M</small></div>
+  <div id="joy" hidden><i></i><span>идти</span></div>
+  <div id="hop" hidden></div>
+
+  <section class="panel" id="pRoutes" hidden>
+    <h3>Маршруты</h3>
+    <p class="sub">Камера сама проведёт по аллеям и остановится у каждого места. Можно ставить на паузу, ускорять и в любой момент взять управление.</p>
+    <div id="routeList" class="seg"></div>
+  </section>
+  <section class="panel" id="pEnv" hidden>
+    <h3>Условия прогулки</h3>
+    <div class="seg"><label>Время года</label><div id="sSeason"><button class="cbtn" data-v="0" type="button">Лето</button><button class="cbtn" data-v="1" type="button">Осень</button><button class="cbtn" data-v="2" type="button">Зима</button></div></div>
+    <div class="seg"><label>Время суток</label><div id="sTod"><button class="cbtn" data-v="0" type="button">День</button><button class="cbtn" data-v="1" type="button">Вечер, фонари</button></div></div>
+    <div class="seg"><label>Возраст посадок</label><div id="sStage"><button class="cbtn" data-v="7" type="button">Через 10 лет</button><button class="cbtn" data-v="6" type="button">День открытия</button></div></div>
+    <div class="seg"><label>Темп</label><div id="sPace"><button class="cbtn" data-v="1" type="button">Прогулочный</button><button class="cbtn" data-v="2.2" type="button">Быстрый</button></div></div>
+    <div class="seg"><label>Качество картинки</label><div id="sQual"><button class="cbtn" data-v="1" type="button">Чёткое</button><button class="cbtn" data-v="0" type="button">Быстрое</button></div></div>
+  </section>
+
+  <div id="bigmap" hidden>
+    <div class="wrap">
+      <div class="mapc"><canvas id="big" width="1080" height="670"></canvas><div class="note" id="bigNote">Нажмите на карту, чтобы перенестись в эту точку</div></div>
+      <div class="list" id="placeList"><h3>Места</h3></div>
+    </div>
+  </div>
+
+  <div id="start">
+    <div class="box">
+      <div class="ey">Болотный парк · Архангельск</div>
+      <h1>Прогулка по парку</h1>
+      <p id="startLead">Пройдите по аллеям проекта от первого лица: деревья через десять лет после посадки, ресторан «Тоня», павильоны «Северной летописи», галереи, ладья и сказочные фигуры.</p>
+      <div class="lbl">Управление</div>
+      <div class="keys" id="keys">
+        <div><span><kbd>W</kbd> <kbd>S</kbd> <kbd>↑</kbd> <kbd>↓</kbd></span> вперёд и назад</div>
+        <div><span><kbd>A</kbd> <kbd>D</kbd></span> шаг в сторону</div>
+        <div><span><kbd>←</kbd> <kbd>→</kbd> <kbd>Q</kbd> <kbd>E</kbd></span> повернуться</div>
+        <div><span>мышь</span> потяните, чтобы осмотреться</div>
+        <div><span>клик</span> по земле — дойти туда</div>
+        <div><span><kbd>Shift</kbd></span> бегом</div>
+        <div><span><kbd>M</kbd></span> карта · <kbd>F</kbd> действие рядом</div>
+      </div>
+      <div class="lbl">С чего начать</div>
+      <div class="starts" id="starts"></div>
+      <div id="startMsg" class="msg" hidden></div>
+      <button class="go" id="go" type="button" disabled>Загружаю модель…</button>
+    </div>
+  </div>
+</div>
+<script src="three_bundle.js"></script>
+<script>window.P3_VE = 1;</script>
+<script src="park3d.js"></script>
+<script src="pano2d.js"></script>
+<script>
+'use strict';
+const GEO = {"vp":{"1":[179.2,67.3],"2":[289.8,92.8],"3":[167.0,80.4],"4":[274.9,151.4],"6":[313.0,197.6],"5":[313.0,197.6],"7":[261.0,112.8],"8":[352.8,309.4],"9":[318.8,53.0],"10":[275.5,83.0],"11":[240.8,42.8],"12":[77.0,174.1],"13":[234.9,226.9],"14":[305.1,219.0],"15":[352.2,129.9]},"head":{"1":-2.0042,"2":-0.9581,"3":0.7889,"4":-1.4641,"6":-0.1742,"5":-0.1742,"7":-1.9974,"8":-2.0978,"9":2.0165,"10":-2.2287,"11":0.1813,"12":3.1307,"13":-2.2131,"14":2.3162,"15":-0.6401},"names":{"1":"Детская зона","2":"Смотровая башня","3":"Настил над прудом","4":"Каскад между прудами","6":"Пруд на месте болота","5":"Болото сегодня","7":"Павильон у воды","8":"Главный вход","9":"Вид с башни","10":"Поморская ладья","11":"Галерея «Мезенская»","12":"Северные истории","13":"Следы леса","14":"Ресторан «Тоня»","15":"Павильон «Гостиный двор»"},"texts":{"1":"Комплекс «Башни и мост», канатный городок, качели-гнёзда, песочный двор и сплэш-пад. Покрытие EPDM 384 м², оборудование из лиственницы.","2":"","3":"Водоём из болота: торф выбран до проектных глубин. Всего воды 34 005 м³, средняя глубина 1,43 м, шельф 0,45 м и откосы 1:4.","4":"Перепад 0,9 м между прудами: три каменные ступени и мостик. Рециркуляция 30 л/с держит воду живой.","6":"Второй водоём ниже каскада. Мелководье с прибрежными растениями (около 15 тыс. шт.) очищает воду и даёт убежище птицам.","5":"Болото сегодня: кочки, тростник и стоячая вода до начала работ.","7":"Восьмигранный павильон 64 м² на берегу первого пруда: чтение, лекции, укрытие от дождя.","8":"Входной навес с кассой и информацией, 120 м². Гранитная площадь 710 м² и радиальная аллея к воде.","9":"Верхняя площадка смотровой башни, 18 м над холмом: видны оба пруда, ресторан, галереи и жилые кварталы за проспектом.","10":"Мастерская-павильон 10 × 6 м, верх до 3,2 м: перевёрнутая деревянная лодка как образ. Место встреч, выставок и рассказов о поморском мореходстве.","11":"Четыре галереи, около 200 м: высокая двускатная кровля, подкосы, резной подзор, золотистые кромки.","12":"Сказочный маршрут: деревянные птица, конь и морской зверь до 3,2 м и таблички о северных рассказах.","13":"Станция 7 × 5 м со стелой 2,2 м: следы животных, поворотная карта сезонов, механический счётчик наблюдений.","14":"Дом-кошель 26 × 15 м с мансардой и летней террасой к пруду: 80 мест в зале, 36 в мансарде, 56 на террасе. Поморская кухня и мастер-классы по росписи козуль.","15":"Каменный Гостиный двор строили 16 лет. В XVII веке через Архангельск шла больше половины внешней торговли страны: лён, пенька, ворвань, меха уходили в Голландию и Англию. Медальон — торговый корабль у причала. Четыре тёплые кабины, одна универсальная."}};
+const $ = (s) => document.querySelector(s), $$ = (s) => Array.from(document.querySelectorAll(s));
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+const plural = (n, a, b, c) => { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? a : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? b : c; };
+const fmtN = (n) => Math.round(n).toLocaleString('ru-RU');
+const HAS_GL = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; } })();
+const COARSE = matchMedia('(pointer: coarse)').matches;
+let EMBED = false; try { EMBED = window.parent !== window && !!window.parent.__walkHost; } catch (e) { EMBED = false; }
+const store = { get(k) { try { return localStorage.getItem('walk.' + k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem('walk.' + k, v); } catch (e) { } } };
+const ICON_ARROW = '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 15V3M4 8l5-5 5 5"/></svg>';
+
+let M = null, park = null, mode = 'none', places = [], placeById = {}, nav = null, VIEWS = [];
+const S = { x: 0, z: 0, y: 0, yaw: 0, pitch: -0.05, vx: 0, vz: 0, bob: 0, pace: +(store.get('pace') || 1), tower: false, towerBase: null };
+const keys = new Set(); let joy = { x: 0, y: 0, on: false };
+let hostPaused = false, auto = null, autoSpeed = 2, lastT = performance.now(), nearPlace = null, cardOpen = null, nearView = null;
+
+/* ------------------------------------------------------------------ геометрия */
+function inPoly(x, y, p) { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const a = p[i], b = p[j]; if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; }
+function segD(x, y, a, b) { const vx = b[0] - a[0], vy = b[1] - a[1], L2 = vx * vx + vy * vy || 1, t = clamp(((x - a[0]) * vx + (y - a[1]) * vy) / L2, 0, 1); return Math.hypot(x - a[0] - t * vx, y - a[1] - t * vy); }
+function polyD(x, y, pts, closed) { let d = 1e9; const n = pts.length; for (let i = 0; i < n - 1; i++) d = Math.min(d, segD(x, y, pts[i], pts[i + 1])); if (closed) d = Math.min(d, segD(x, y, pts[n - 1], pts[0])); return d; }
+function inRect(x, y, o, pad) { const c = Math.cos(o.rot || 0), s = Math.sin(o.rot || 0), dx = x - o.x, dy = y - o.y; return Math.abs(dx * c + dy * s) <= o.w / 2 + (pad || 0) && Math.abs(-dx * s + dy * c) <= o.d / 2 + (pad || 0); }
+function resample(pts, step, closed) { const seq = closed ? pts.concat([pts[0]]) : pts, out = [seq[0]]; let carry = 0; for (let i = 0; i < seq.length - 1; i++) { const a = seq[i], b = seq[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]); let t = step - carry; while (t <= L) { out.push([a[0] + (b[0] - a[0]) * t / L, a[1] + (b[1] - a[1]) * t / L]); t += step; } carry = L - (t - step); } const e = seq[seq.length - 1]; if (Math.hypot(e[0] - out[out.length - 1][0], e[1] - out[out.length - 1][1]) > 0.5) out.push(e); if (closed) out.pop(); return out; }
+
+/* ------------------------------------------------------------------ мир: препятствия, площадки, высоты */
+let W = null;
+function buildWorld() {
+  const decks = M.paths.filter(p => p.kind === 'deck').map(p => ({ pts: p.pts, w: p.width / 2 + 0.25 }));
+  const obst = [];
+  for (const b of M.buildings) {
+    if (b.kind === 'gate') { const c = Math.cos(b.rot), s = Math.sin(b.rot); for (const sx of [-9.2, 9.2]) obst.push({ x: b.x + sx * c, y: b.y + sx * s, w: 1.6, d: 1.6, rot: b.rot }); obst.push({ x: b.x - (-1.5) * s, y: b.y + (-1.5) * c, w: 3.4, d: 2.4, rot: b.rot }); }
+    else if (b.kind === 'pavilion') continue;
+    else if (b.kind === 'tower') obst.push({ x: b.x, y: b.y, w: 6, d: 6, rot: 0, tower: true });
+    else obst.push({ x: b.x, y: b.y, w: b.w + 0.6, d: b.d + 0.6, rot: b.rot || 0 });
+  }
+  const N = M.north; if (N) { obst.push({ x: N.ladya.x, y: N.ladya.y, w: N.ladya.w + 0.4, d: N.ladya.d + 0.4, rot: N.ladya.rot }); for (const f of N.figures) obst.push({ x: f.x, y: f.y, w: 2.6, d: 2.6, rot: f.rot }); }
+  if (park && park.walkObstacles) obst.push(...park.walkObstacles);
+  else if (M.infra) { for (const o of M.infra.wc) obst.push({ x: o.x, y: o.y, w: o.w + 0.7, d: o.d + 0.7, rot: o.rot }); const r = M.infra.rest; obst.push({ x: r.x, y: r.y, w: r.w + 0.9, d: r.d + 0.9, rot: r.rot }); }
+  const plats = (park && park.walkPlatforms ? park.walkPlatforms.slice() : []);
+  const VE = (window.P3 && P3.VE) || 1;
+  for (const o of M.platforms) plats.push({ x: o.x, y: o.y, w: o.w, d: o.d, rot: o.rot || 0, h: 0.5 * VE });
+  // деревья: сетка 8 м
+  const G = 8, grid = new Map(), key = (i, j) => i * 1000 + j;
+  for (const t of M.trees) { const k = key(Math.floor(t[0] / G), Math.floor(t[1] / G)); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(t); }
+  const ch = M.channel;
+  W = { decks, obst, plats, grid, G, key, ch, VE };
+}
+function onDeck(x, y) { for (const d of W.decks) if (polyD(x, y, d.pts, false) < d.w) return true; return false; }
+function platAt(x, y) { for (const p of W.plats) if (inRect(x, y, p, 0.1)) return p; return null; }
+function isWater(x, y) {
+  if (onDeck(x, y) || platAt(x, y)) return false;
+  for (const p of M.ponds) if (inPoly(x, y, p)) return true;
+  if (W.ch && segD(x, y, W.ch.a, W.ch.b) < W.ch.w / 2) return true;
+  return false;
+}
+function blocked(x, y) {
+  if (!inPoly(x, y, M.site) && polyD(x, y, M.site, true) > 2.5) return true;
+  if (isWater(x, y)) return true;
+  for (const o of W.obst) if (inRect(x, y, o, 0.3)) return true;
+  const i = Math.floor(x / W.G), j = Math.floor(y / W.G);
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const L = W.grid.get(W.key(i + a, j + b)); if (L) for (const t of L) if (Math.hypot(t[0] - x, t[1] - y) < 0.5) return true; }
+  return false;
+}
+function groundY(x, y) {
+  let h = park ? park.gY(x, y) : 0;
+  if (onDeck(x, y)) h = Math.max(h, 0.5 * W.VE + 0.03);
+  const p = platAt(x, y); if (p) h = Math.max(h, p.h);
+  if (M.yoga && Math.hypot(x - M.yoga.x, y - M.yoga.y) < 6) h += 0.35;
+  return h;
+}
+
+/* ------------------------------------------------------------------ сеть дорожек и поиск пути */
+function buildNav() {
+  const nodes = [], adj = [], lines = [];
+  const addLine = (pts, closed, step) => { const r = resample(pts, step || 2.5, closed); const ids = r.map(p => { nodes.push(p); adj.push([]); return nodes.length - 1; }); for (let i = 0; i < ids.length - 1; i++) link(ids[i], ids[i + 1]); if (closed && ids.length > 2) link(ids[ids.length - 1], ids[0]); lines.push(ids); };
+  const link = (a, b) => { if (a === b) return; const d = Math.hypot(nodes[a][0] - nodes[b][0], nodes[a][1] - nodes[b][1]); adj[a].push([b, d]); adj[b].push([a, d]); };
+  for (const p of M.paths) addLine(p.pts, !!p.closed);
+  if (M.infra) { addLine(M.infra.rest.approach, false, 2); for (const o of M.infra.wc) if (o.front && o.link) addLine([o.front, o.link], false, 2); }
+  const G = 4, grid = new Map(), k = (x, y) => Math.floor(x / G) * 1000 + Math.floor(y / G);
+  const lineOf = new Int32Array(nodes.length); lines.forEach((ids, li) => ids.forEach(i => { lineOf[i] = li; }));
+  nodes.forEach((p, i) => { const kk = k(p[0], p[1]); if (!grid.has(kk)) grid.set(kk, []); grid.get(kk).push(i); });
+  nodes.forEach((p, i) => { const gi = Math.floor(p[0] / G), gj = Math.floor(p[1] / G); for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const L = grid.get((gi + a) * 1000 + gj + b); if (L) for (const j of L) if (j > i && lineOf[j] !== lineOf[i] && Math.hypot(nodes[j][0] - p[0], nodes[j][1] - p[1]) < 3.2) link(i, j); } });
+  // концы дорожек — к ближайшему узлу другой дорожки
+  for (const ids of lines) for (const e of [ids[0], ids[ids.length - 1]]) { let best = -1, bd = 9; nodes.forEach((q, j) => { if (lineOf[j] === lineOf[e]) return; const d = Math.hypot(q[0] - nodes[e][0], q[1] - nodes[e][1]); if (d < bd) { bd = d; best = j; } }); if (best >= 0) link(e, best); }
+  return { nodes, adj, nearest(x, y, filt) { let b = -1, bd = 1e9; for (let i = 0; i < nodes.length; i++) { const d = Math.hypot(nodes[i][0] - x, nodes[i][1] - y); if (d < bd && (!filt || filt(i, d))) { bd = d; b = i; } } return b; } };
+}
+function navPath(from, to) {
+  const s = nav.nearest(from[0], from[1]), t = nav.nearest(to[0], to[1]); const n = nav.nodes.length;
+  const dist = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), done = new Uint8Array(n); dist[s] = 0;
+  const heap = [[0, s]]; const push = (e) => { heap.push(e); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+  const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+  while (heap.length) { const [d, u] = pop(); if (done[u]) continue; done[u] = 1; if (u === t) break; for (const [v, w] of nav.adj[u]) if (d + w < dist[v]) { dist[v] = d + w; prev[v] = u; push([dist[v], v]); } }
+  const out = []; if (dist[t] === Infinity) return [from, to]; for (let u = t; u !== -1; u = prev[u]) out.push(nav.nodes[u]); out.reverse();
+  const res = [from].concat(out); if (Math.hypot(to[0] - out[out.length - 1][0], to[1] - out[out.length - 1][1]) > 1) res.push(to);
+  // сгладить углы (Чайкин, 2 прохода)
+  let pts = res; for (let k = 0; k < 2; k++) { const q = [pts[0]]; for (let i = 0; i < pts.length - 1; i++) { const a = pts[i], b = pts[i + 1]; q.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25], [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]); } q.push(pts[pts.length - 1]); pts = q; }
+  return pts;
+}
+function polyLen(p) { let L = 0; for (let i = 0; i < p.length - 1; i++) L += Math.hypot(p[i + 1][0] - p[i][0], p[i + 1][1] - p[i][1]); return L; }
+function pointAt(p, s) { s = Math.max(0, s); for (let i = 0; i < p.length - 1; i++) { const L = Math.hypot(p[i + 1][0] - p[i][0], p[i + 1][1] - p[i][1]); if (s <= L) { const t = L ? s / L : 0; return [p[i][0] + (p[i + 1][0] - p[i][0]) * t, p[i][1] + (p[i + 1][1] - p[i][1]) * t]; } s -= L; } return p[p.length - 1].slice(); }
+
+/* ------------------------------------------------------------------ места */
+const ZONES = { kids: 'Детская зона', culture: 'Культурная зона', mass: 'Массовый отдых', dog: 'Площадка для собак', fit: 'Спорт и воркаут', service: 'Служебная зона', peninsula: 'Полуостров', plaza: 'Входная площадь' };
+const EXTRA_TEXT = {
+  bird: 'Резная птица до 3,2 м на сказочном маршруте. Рядом таблички с северными историями в духе Степана Писахова и Бориса Шергина.',
+  horse: 'Деревянный конь с мезенской росписью и золотой гривой. Фигура смотрит на воду и встречает гостей с Карпогорской улицы.',
+  beast: 'Морской зверь из поморских сказок: спина-волны, золотые плавники. Последняя фигура маршрута «Северные истории».',
+  deck: 'Деревянный настил над первым прудом, 2,5 м шириной, с перилами. Внизу мелководье с рогозом и кубышкой.',
+};
+function makePlaces() {
+  const B = (k) => M.buildings.find(b => b.kind === k), N = M.north, I = M.infra, out = [];
+  const add = (id, title, x, y, o) => out.push(Object.assign({ id, title, x, y, r: 18, want: 11, still: 0, ey: 'Рядом' }, o || {}));
+  const g = B('gate'), t = B('tower'), pv = B('pavilion');
+  add('gate', 'Главный вход', g.x, g.y, { still: 8, r: 24, want: 14 });
+  if (I) {
+    const loc = (o, lx, ly) => [o.x + lx * Math.cos(o.rot) - ly * Math.sin(o.rot), o.y + lx * Math.sin(o.rot) + ly * Math.cos(o.rot)];
+    const r = I.rest; add('rest', 'Ресторан «Тоня»', r.x, r.y, { still: 14, r: 30, want: 22, ey: 'Ресторан', hint: loc(r, 7, -(r.d / 2 + r.terrace.d + 13)) });
+    for (const o of I.wc) add(o.key, o.title, o.x, o.y, { still: o.key === 'wc_trade' ? 15 : 0, r: 16, want: 8, ey: 'Северная летопись · туалет', theme: o.theme, short: o.title.split(' · ')[1], hint: loc(o, -4.5, o.d / 2 + 10) });
+  }
+  add('kids', 'Детская зона', M.pg[0].x, M.pg[0].y, { still: 1, r: 26, want: 16 });
+  add('tower', 'Смотровая башня', t.x, t.y, { still: 2, r: 20, want: 9 });
+  add('pav', 'Павильон у воды', pv.x, pv.y, { still: 7, r: 16, want: 9 });
+  const ch = M.channel; add('cascade', 'Каскад', (ch.a[0] + ch.b[0]) / 2, (ch.a[1] + ch.b[1]) / 2, { still: 4, r: 18, want: 10 });
+  const dk = M.paths.find(p => p.name.indexOf('Настил над прудом') === 0); if (dk) { const m = dk.pts[Math.floor(dk.pts.length / 2)]; add('deck', 'Настил над прудом', m[0], m[1], { still: 3, r: 14, want: 0, text: EXTRA_TEXT.deck }); }
+  const cen = (p) => [p.reduce((s, q) => s + q[0], 0) / p.length, p.reduce((s, q) => s + q[1], 0) / p.length];
+  const c1 = cen(M.ponds[1]); add('pond2', 'Пруд на месте болота', c1[0], c1[1], { still: 6, r: 40, want: 30 });
+  if (N) {
+    add('ladya', 'Поморская ладья', N.ladya.x, N.ladya.y, { still: 10, r: 18, want: 11, ey: 'Мастерская' });
+    const gm = N.galleries[0].pts[Math.floor(N.galleries[0].pts.length / 2)]; add('gallery', 'Галерея «Мезенская»', gm[0], gm[1], { still: 11, r: 14, want: 0, ey: 'Крытые галереи' });
+    const nm = { bird: 'Птица', horse: 'Конь', beast: 'Морской зверь' };
+    for (const f of N.figures) add('tale_' + f.kind, 'Северные истории: ' + nm[f.kind].toLowerCase(), f.x, f.y, { still: f.kind === 'horse' ? 12 : 0, r: 12, want: 7, text: EXTRA_TEXT[f.kind], ey: 'Сказочный маршрут' });
+    add('tracks', 'Станция «Следы леса»', N.station.x, N.station.y, { still: 13, r: 14, want: 8, ey: 'Маршрут «Следы леса»' });
+  }
+  add('fit', 'Спорт и воркаут', M.work.x, M.work.y, { r: 18, want: 10 });
+  const dz = cen(M.zones.dog); add('dog', 'Площадка для собак', dz[0], dz[1], { r: 22, want: 14 });
+  // тексты из модели
+  const T = {}; if (park) for (const p of park.pois) T[p.id] = p.text;
+  for (const p of out) { if (!p.text) p.text = T[p.id] || T[p.id.replace('tale_', 'tales')] || ''; }
+  // точка, откуда смотреть
+  for (const p of out) {
+    if (p.hint && !blocked(p.hint[0], p.hint[1])) { p.stand = p.hint.slice(); continue; }
+    let best = -1, bc = 1e9; nav.nodes.forEach((q, i) => { const d = Math.hypot(q[0] - p.x, q[1] - p.y); const c = Math.abs(d - p.want) + (d < p.want * 0.6 ? 20 : 0); if (c < bc) { bc = c; best = i; } });
+    p.stand = nav.nodes[best].slice();
+  }
+  return out;
+}
+const ROUTES = [
+  { id: 'big', t: 'Большой круг', d: 'Главные места парка по основным аллеям: вход, ресторан, сказки, детская зона, ладья, башня, пруд.', stops: ['gate', 'rest', 'tracks', 'tale_beast', 'tale_horse', 'wc_koch', 'kids', 'wc_city', 'gallery', 'ladya', 'tower', 'wc_trade', 'pond2', 'wc_yard', 'gate'] },
+  { id: 'letopis', t: 'Северная летопись', d: 'Четыре павильона по порядку истории: Новые Холмогоры, Гостиный двор, Соломбальская верфь, поморский коч.', stops: ['wc_city', 'wc_trade', 'wc_yard', 'wc_koch'] },
+  { id: 'tales', t: 'Северные истории', d: 'От ресторана через станцию «Следы леса» к трём деревянным фигурам и обратно к воде.', stops: ['rest', 'tracks', 'tale_beast', 'tale_horse', 'tale_bird', 'deck', 'pav'] },
+  { id: 'water', t: 'Вдоль воды', d: 'Настил над прудом, павильон у воды, каскад и пруд на месте болота.', stops: ['deck', 'pav', 'cascade', 'pond2', 'rest'] },
+];
+const STARTS = [
+  { id: 'gate', t: 'Главный вход', d: 'с Московского проспекта' },
+  { id: 'rest', t: 'Ресторан «Тоня»', d: 'терраса над прудом' },
+  { id: 'wc_koch', t: 'Вход с Карпогорской', d: 'у павильона «Поморский коч»' },
+  { id: 'wc_city', t: 'Северный вход', d: 'у детской зоны и галереи' },
+];
+
+/* ------------------------------------------------------------------ интерфейс: карта */
+const MAPW = 540, MAPH = 335;
+let mapBase = null;
+function drawPlan(cx, s, opts) {
+  opts = opts || {};
+  const P = (p) => [p[0] * s, p[1] * s];
+  const poly = (pts, fill, stroke, lw) => { cx.beginPath(); pts.forEach((p, i) => { const q = P(p); i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1]); }); cx.closePath(); if (fill) { cx.fillStyle = fill; cx.fill(); } if (stroke) { cx.strokeStyle = stroke; cx.lineWidth = lw || 1; cx.stroke(); } };
+  const line = (pts, stroke, lw, closed, dash) => { cx.beginPath(); pts.forEach((p, i) => { const q = P(p); i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1]); }); if (closed) cx.closePath(); cx.strokeStyle = stroke; cx.lineWidth = lw; cx.setLineDash(dash || []); cx.lineCap = 'round'; cx.lineJoin = 'round'; cx.stroke(); cx.setLineDash([]); };
+  cx.fillStyle = '#0B1D17'; cx.fillRect(0, 0, MAPW * s, MAPH * s);
+  poly(M.site, '#24432F', '#4A6B4F', 1.2 * s);
+  for (const b of M.berm) poly(b, '#2C5236');
+  for (const t of M.trees) { cx.fillStyle = 'rgba(80,140,80,.45)'; cx.beginPath(); cx.arc(t[0] * s, t[1] * s, 1.6 * s, 0, 6.3); cx.fill(); }
+  for (const p of M.ponds) poly(p, '#2E6E86', '#5FA3BC', 0.8 * s);
+  for (const p of M.paths) line(p.pts, p.kind === 'deck' ? '#B98A54' : p.kind === 'track' ? '#9A4A36' : '#CBB894', (p.kind === 'main' ? 3 : 2) * s, !!p.closed);
+  if (M.infra) { const r = M.infra.rest; line(r.drive, '#6B6E70', r.drive_w * s); line(r.approach, '#CBB894', 2 * s); for (const o of M.infra.wc) if (o.front) line([o.front, o.link], '#CBB894', 2 * s); }
+  const rect = (o, fill, stroke) => { const c = Math.cos(o.rot || 0), sn = Math.sin(o.rot || 0), w = o.w / 2, d = o.d / 2; poly([[-w, -d], [w, -d], [w, d], [-w, d]].map(([a, b]) => [o.x + a * c - b * sn, o.y + a * sn + b * c]), fill, stroke, 1); };
+  for (const b of M.buildings) rect(b, '#8C8A80');
+  if (M.north) { const N = M.north; for (const g of N.galleries) line(g.pts, '#D1B46E', 3.6 * s); rect(N.ladya, '#1F5A44', '#D1B46E'); rect(N.station, '#7A5A34'); for (const f of N.figures) { cx.fillStyle = '#D1B46E'; cx.beginPath(); cx.arc(f.x * s, f.y * s, 2.2 * s, 0, 6.3); cx.fill(); } }
+  if (M.infra) { for (const o of M.infra.wc) rect(o, '#D1B46E'); const r = M.infra.rest; rect(r, '#D1B46E', '#F1EAD7'); }
+  if (opts.labels) {
+    cx.font = `600 ${Math.round(11 * opts.k)}px Golos Text, system-ui, sans-serif`; cx.textAlign = 'center';
+    const boxes = [], Wd = MAPW * s, fs = 11 * opts.k;
+    for (const p of places) { if (p.id.startsWith('tale_') && p.id !== 'tale_horse') continue; const x = p.x * s, y = p.y * s; cx.fillStyle = '#D1B46E'; cx.beginPath(); cx.arc(x, y, 4 * opts.k, 0, 6.3); cx.fill(); cx.strokeStyle = '#0B1D17'; cx.lineWidth = 1.5 * opts.k; cx.stroke(); }
+    for (const p of places) { if (p.id.startsWith('tale_') && p.id !== 'tale_horse') continue; const x = p.x * s, y = p.y * s; const label = p.id === 'tale_horse' ? 'Северные истории' : (p.short || p.title); const w = cx.measureText(label).width;
+      let best = null; for (const [ox, oy] of [[0, -8], [0, 16], [w / 2 + 8, 4], [-w / 2 - 8, 4], [0, -22], [0, 30]]) { let lx = clamp(x + ox, w / 2 + 4, Wd - w / 2 - 4), ly = y + oy * opts.k; const b = [lx - w / 2 - 2, ly - fs, lx + w / 2 + 2, ly + 3]; if (!boxes.some(q => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1])) { best = [lx, ly, b]; break; } }
+      if (!best) continue; boxes.push(best[2]); cx.lineWidth = 3 * opts.k; cx.strokeStyle = 'rgba(8,20,16,.85)'; cx.strokeText(label, best[0], best[1]); cx.fillStyle = '#F1EAD7'; cx.fillText(label, best[0], best[1]); }
+  }
+}
+function drawMini() {
+  const cv = $('#mini'), cx = cv.getContext('2d'), s = cv.width / MAPW;
+  if (!mapBase) { mapBase = document.createElement('canvas'); mapBase.width = cv.width; mapBase.height = cv.height; drawPlan(mapBase.getContext('2d'), s); }
+  cx.drawImage(mapBase, 0, 0);
+  drawDyn(cx, s, 1);
+}
+function drawDyn(cx, s, k) {
+  if (auto && auto.path) { cx.beginPath(); auto.path.forEach((p, i) => i ? cx.lineTo(p[0] * s, p[1] * s) : cx.moveTo(p[0] * s, p[1] * s)); cx.strokeStyle = 'rgba(209,180,110,.9)'; cx.lineWidth = 2.2 * k; cx.setLineDash([5 * k, 4 * k]); cx.stroke(); cx.setLineDash([]); }
+  if (auto) { const p = placeById[auto.r.stops[auto.i]]; if (p) { cx.strokeStyle = '#D1B46E'; cx.lineWidth = 2 * k; cx.beginPath(); cx.arc(p.x * s, p.y * s, 7 * k, 0, 6.3); cx.stroke(); } }
+  const x = S.x * s, y = S.z * s, fov = park ? park.camera.fov * Math.PI / 180 * park.camera.aspect * 0.5 : 0.7, R = 34 * k;
+  const yaw = mode === 'pano' && panoState.n ? (GEO.head[panoState.n] || 0) + (panoState.yaw || 0) : S.yaw;
+  const g = cx.createRadialGradient(x, y, 0, x, y, R); g.addColorStop(0, 'rgba(241,234,215,.55)'); g.addColorStop(1, 'rgba(241,234,215,0)');
+  cx.fillStyle = g; cx.beginPath(); cx.moveTo(x, y); cx.arc(x, y, R, yaw - Math.min(fov, 1.1), yaw + Math.min(fov, 1.1)); cx.closePath(); cx.fill();
+  cx.fillStyle = '#F1EAD7'; cx.strokeStyle = '#13241D'; cx.lineWidth = 1.5 * k; cx.beginPath(); const a = yaw, r = 6 * k;
+  cx.moveTo(x + Math.cos(a) * r * 1.4, y + Math.sin(a) * r * 1.4); cx.lineTo(x + Math.cos(a + 2.5) * r, y + Math.sin(a + 2.5) * r); cx.lineTo(x + Math.cos(a - 2.5) * r, y + Math.sin(a - 2.5) * r); cx.closePath(); cx.fill(); cx.stroke();
+}
+function openBig(on) {
+  const bm = $('#bigmap'); bm.hidden = !on; $('#bMap').setAttribute('aria-pressed', String(on)); if (!on) return;
+  closePanels('map'); fillPlaceList();
+  const cv = $('#big'), cx = cv.getContext('2d'), s = cv.width / MAPW; drawPlan(cx, s, { labels: true, k: cv.width / 1080 * 1.6 }); drawDyn(cx, s, 2);
+  if (mode === 'pano') { for (const v of VIEWS) { const p = GEO.vp[v.n]; cx.fillStyle = '#E3955A'; cx.beginPath(); cx.arc(p[0] * s, p[1] * s, 9, 0, 6.3); cx.fill(); cx.fillStyle = '#13241D'; cx.font = '700 11px Golos Text, sans-serif'; cx.textAlign = 'center'; cx.fillText(String(v.n), p[0] * s, p[1] * s + 4); } }
+  $('#bigNote').textContent = mode === 'pano' ? 'Нажмите на точку съёмки, чтобы открыть панораму' : 'Нажмите на карту, чтобы перенестись в эту точку';
+}
+function fillPlaceList() {
+  const L = $('#placeList'); L.querySelectorAll('button').forEach(b => b.remove());
+  const items = mode === 'pano' ? VIEWS.map(v => ({ id: 'v' + v.n, t: v.name, i: String(v.n) })) : places.filter(p => !p.id.startsWith('tale_') || p.id === 'tale_horse').map(p => ({ id: p.id, t: p.id === 'tale_horse' ? 'Северные истории' : p.title, i: dist2(p) }));
+  for (const it of items) { const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `<i>${it.i}</i><span>${it.t}</span>`; b.addEventListener('click', () => { openBig(false); if (mode === 'pano') loadPano(+it.id.slice(1)); else { const p = placeById[it.id]; teleport(p.stand, p); } }); L.appendChild(b); }
+}
+function dist2(p) { const d = Math.hypot(p.x - S.x, p.y - S.z); return d < 1000 ? fmtN(d) + ' м' : (d / 1000).toFixed(1) + ' км'; }
+
+/* ------------------------------------------------------------------ интерфейс: компас, зона, карточка */
+const CSTEPS = []; for (let b = 0; b < 360; b += 15) CSTEPS.push(b);
+function initCompass() { const el = $('#cstrip'); el.innerHTML = CSTEPS.map(b => `<i data-b="${b}" class="${b % 90 === 0 ? 'c' : ''}${b === 0 ? ' n' : ''}">${b % 90 === 0 ? ['С', 'В', 'Ю', 'З'][b / 90] : b % 45 === 0 ? ['СВ', 'ЮВ', 'ЮЗ', 'СЗ'][(b - 45) / 90] : '·'}</i>`).join(''); }
+function drawCompass(yaw) {
+  const el = $('#cstrip'), w = el.clientWidth || 300, bearing = ((yaw * 180 / Math.PI + 90) % 360 + 360) % 360, span = 150;
+  el.querySelectorAll('i').forEach(i => { let d = +i.dataset.b - bearing; d = ((d + 540) % 360) - 180; if (Math.abs(d) > span / 2) { i.style.display = 'none'; return; } i.style.display = ''; i.style.left = (50 + d / span * 100) + '%'; });
+  $('#coord').textContent = Math.round(bearing) + '° · ' + (mode === 'pano' ? 'панорама' : 'высота ' + (S.y - 1.65).toFixed(1).replace('.', ',') + ' м');
+}
+function zoneAt(x, y) {
+  if (onDeck(x, y)) return 'Настил над водой';
+  if (M.infra) { const r = M.infra.rest; if (Math.hypot(x - r.x, y - r.y) < 36) return 'Ресторан «Тоня»'; }
+  for (const k of Object.keys(ZONES)) if (M.zones[k] && inPoly(x, y, M.zones[k])) return ZONES[k];
+  for (const b of M.berm) if (inPoly(x, y, b)) return 'Берма вдоль проспекта';
+  return 'Тихая зона';
+}
+function showCard(p, expanded, auto_) {
+  const c = $('#card');
+  if (!p) { c.hidden = true; cardOpen = null; return; }
+  if (cardOpen === p.id && c.classList.contains('compact') === !expanded && !c.hidden) return;
+  cardOpen = p.id; c.hidden = false; c.classList.toggle('compact', !expanded);
+  $('#cardEy').textContent = auto_ ? 'Остановка ' + (auto.i + 1) + ' из ' + auto.r.stops.length : (p.ey || 'Рядом');
+  $('#cardT').textContent = p.title; $('#cardX').textContent = (p.theme ? p.theme + '. ' : '') + p.text;
+  const img = $('#cardImg'); if (expanded && p.still && innerWidth > 760) { img.src = 'img/still_' + p.still + '.jpg'; img.alt = 'Кадр: ' + p.title; img.hidden = false; } else img.hidden = true;
+  const row = $('#cardRow'); row.innerHTML = '';
+  const btn = (t, f, pri) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'cbtn' + (pri ? ' pri' : ''); b.textContent = t; b.addEventListener('click', f); row.appendChild(b); };
+  if (!expanded) btn('Подробнее', () => showCard(p, true));
+  else if (!auto_) btn('Свернуть', () => showCard(p, false));
+  if (p.still && GEO.vp[p.still] && p.still !== 5) btn('Панорама 360°', () => openPano(p.still));
+  if (p.id === 'tower' && !S.tower) btn('Подняться на башню', climbTower, true);
+}
+
+/* ------------------------------------------------------------------ движение */
+function setCamera() {
+  if (!park) return;
+  const c = park.camera, cp = Math.cos(S.pitch);
+  c.position.set(S.x, S.y + S.bob, S.z);
+  c.lookAt(S.x + Math.cos(S.yaw) * cp, S.y + S.bob + Math.sin(S.pitch), S.z + Math.sin(S.yaw) * cp);
+  park.dirty = true;
+}
+function teleport(pt, look, keepYaw) {
+  auto = null; updateRouteBar();
+  if (blocked(pt[0], pt[1])) pt = nav.nodes[nav.nearest(pt[0], pt[1], (i) => !blocked(nav.nodes[i][0], nav.nodes[i][1]))];
+  const f = $('#fade'); f.classList.add('on');
+  setTimeout(() => {
+    S.x = pt[0]; S.z = pt[1]; S.tower = false;
+    if (look) S.yaw = Math.atan2(look.y - S.z, look.x - S.x); else if (!keepYaw) S.yaw = S.yaw;
+    S.pitch = -0.04; S.y = groundY(S.x, S.z) + 1.65; setCamera(); f.classList.remove('on'); nearPlace = null; cardOpen = null; updateNear(true);
+  }, 260);
+}
+function tryMove(dx, dz) {
+  const nx = S.x + dx, nz = S.z + dz;
+  if (!S.tower && blocked(S.x, S.z)) { S.x = nx; S.z = nz; return true; }
+  if (S.tower) { const b = S.towerBase; S.x = clamp(nx, b.x - 1.4, b.x + 1.4); S.z = clamp(nz, b.y - 1.4, b.y + 1.4); return true; }
+  if (!blocked(nx, nz)) { S.x = nx; S.z = nz; return true; }
+  if (!blocked(nx, S.z)) { S.x = nx; return true; }
+  if (!blocked(S.x, nz)) { S.z = nz; return true; }
+  return false;
+}
+function climbTower() {
+  const t = M.buildings.find(b => b.kind === 'tower'); auto = null; updateRouteBar();
+  S.towerBase = t; S.tower = true; S.x = t.x + 0.4; S.z = t.y + 0.4; S.pitch = -0.12;
+  const target = park.gY(t.x, t.y) - 0.3 + 18 + 0.1 + 1.65; const y0 = S.y, t0 = performance.now();
+  const step = () => { const k = clamp((performance.now() - t0) / 2200, 0, 1), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; S.y = y0 + (target - y0) * e; setCamera(); if (k < 1) requestAnimationFrame(step); };
+  step(); hint('Вы на верхней площадке, 18 м. Осмотритесь и нажмите «Спуститься»'); cardOpen = null; showCard(placeById.tower, false); renderActions();
+}
+function leaveTower() {
+  const t = S.towerBase; S.tower = false; const p = placeById.tower; S.x = p.stand[0]; S.z = p.stand[1]; S.y = groundY(S.x, S.z) + 1.65; S.yaw = Math.atan2(t.y - S.z, t.x - S.x); S.pitch = 0.05; setCamera(); cardOpen = null; updateNear(true);
+}
+function update(now) {
+  const dt = clamp((now - lastT) / 1000, 0, 0.06); lastT = Math.max(lastT, now);
+  if (mode !== 'gl') return;
+  let moved = false;
+  if (auto) moved = stepAuto(dt) || moved;
+  else {
+    let f = 0, r = 0, turn = 0;
+    if (keys.has('KeyW') || keys.has('ArrowUp')) f += 1; if (keys.has('KeyS') || keys.has('ArrowDown')) f -= 1;
+    if (keys.has('KeyD')) r += 1; if (keys.has('KeyA')) r -= 1;
+    if (keys.has('ArrowRight') || keys.has('KeyE')) turn += 1; if (keys.has('ArrowLeft') || keys.has('KeyQ')) turn -= 1;
+    if (joy.on) { f += -joy.y; r += joy.x; }
+    if (turn) { S.yaw += turn * dt * 1.6; moved = true; }
+    const run = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 2.4 : 1, sp = 2.4 * S.pace * run;
+    const tvx = (Math.cos(S.yaw) * f - Math.sin(S.yaw) * r) * sp, tvz = (Math.sin(S.yaw) * f + Math.cos(S.yaw) * r) * sp;
+    const k = Math.min(1, dt * 9); S.vx += (tvx - S.vx) * k; S.vz += (tvz - S.vz) * k;
+    const v = Math.hypot(S.vx, S.vz);
+    if (v > 0.02) { if (!tryMove(S.vx * dt, S.vz * dt)) { S.vx *= 0.3; S.vz *= 0.3; } moved = true; S.bob = Math.sin(now * 0.0105 * Math.min(1.6, v / 2.4)) * Math.min(0.035, v * 0.012); }
+    else S.bob *= 0.85;
+  }
+  if (!S.tower) { const ty = groundY(S.x, S.z) + 1.65; const dy = ty - S.y; if (Math.abs(dy) > 0.002) { S.y += dy * Math.min(1, dt * 10); moved = true; } }
+  if (moved || dragging) setCamera();
+  frameUI(now);
+}
+/* ------------------------------------------------------------------ автопрогулка */
+function startRoute(r, fromStart) {
+  closePanels(); S.tower = false; auto = { r, i: 0, phase: 'plan', t: 0, paused: false };
+  if (fromStart) { const p = placeById[r.stops[0]]; S.x = p.stand[0]; S.z = p.stand[1]; S.y = groundY(S.x, S.z) + 1.65; S.yaw = Math.atan2(p.y - S.z, p.x - S.x); }
+  updateRouteBar(); hint('Автопрогулка: «' + r.t + '». Нажмите W или потяните мышью, чтобы взять управление');
+}
+function walkTo(pt, look) { auto = { r: { id: 'go', t: 'Иду к точке', stops: ['__go'] }, i: 0, phase: 'plan', t: 0, paused: false, go: { stand: pt, x: look ? look.x : pt[0], y: look ? look.y : pt[1], title: look ? look.title : '' }, quiet: !look }; updateRouteBar(); }
+function stepAuto(dt) {
+  const a = auto, sp = 2.4 * autoSpeed;
+  const stop = a.go || placeById[a.r.stops[a.i]];
+  if (a.phase === 'plan') { a.path = navPath([S.x, S.z], stop.stand); a.len = polyLen(a.path); a.s = 0; a.phase = 'move'; if (!a.quiet) showCard(null); }
+  if (a.paused) return false;
+  if (a.phase === 'move') {
+    a.s = Math.min(a.len, a.s + sp * dt); const p = pointAt(a.path, a.s), la = pointAt(a.path, Math.min(a.len, a.s + 6));
+    S.x = p[0]; S.z = p[1];
+    let want = Math.atan2(la[1] - p[1], la[0] - p[0]); if (a.len - a.s < 7 || Math.hypot(la[0] - p[0], la[1] - p[1]) < 0.5) want = Math.atan2(stop.y - S.z, stop.x - S.x);
+    if (!dragging) S.yaw += wrapA(want - S.yaw) * Math.min(1, dt * 2.6);
+    S.pitch += (-0.04 - S.pitch) * Math.min(1, dt * 2);
+    S.bob = Math.sin(performance.now() * 0.011) * 0.025;
+    if (a.s >= a.len - 0.01) { a.phase = 'stop'; a.t = 0; if (a.go) { auto = null; updateRouteBar(); if (stop.title) { const pl = places.find(q => q.title === stop.title); if (pl) showCard(pl, true); } return true; } showCard(stop, true, true); }
+    updateRouteBar(); return true;
+  }
+  if (a.phase === 'stop') {
+    const want = Math.atan2(stop.y - S.z, stop.x - S.x); if (!dragging) S.yaw += wrapA(want - S.yaw) * Math.min(1, dt * 2.2);
+    a.t += dt; S.bob *= 0.9;
+    if (a.t > 9) nextStop();
+    updateRouteBar(); return true;
+  }
+  return false;
+}
+function nextStop() { if (!auto) return; auto.i++; if (auto.i >= auto.r.stops.length) { const r = auto.r; auto = null; updateRouteBar(); hint('Маршрут «' + r.t + '» пройден'); return; } auto.phase = 'plan'; updateRouteBar(); }
+function updateRouteBar() {
+  const bar = $('#routebar'); if (!auto || auto.r.id === 'go') { bar.hidden = true; renderActions(); return; }
+  bar.hidden = false; const st = placeById[auto.r.stops[auto.i]];
+  $('#rtT').textContent = auto.r.t + ' · ' + (auto.i + 1) + '/' + auto.r.stops.length;
+  $('#rtS').textContent = (auto.phase === 'stop' ? 'Здесь: ' : 'Дальше: ') + (st ? st.title : '') + (auto.phase === 'move' && auto.len ? ' · ' + fmtN(auto.len - auto.s) + ' м' : '');
+  const tot = auto.r.stops.length, fr = auto.phase === 'move' && auto.len ? auto.s / auto.len : 1; $('#rtP').style.width = ((auto.i + (auto.phase === 'stop' ? 1 : fr)) / tot * 100).toFixed(1) + '%';
+  $('#rtPause').textContent = auto.paused ? 'Дальше идти' : 'Пауза'; $('#rtSpeed').textContent = '×' + autoSpeed;
+  renderActions();
+}
+function takeControl() { if (auto) { auto = null; updateRouteBar(); hint('Управление у вас'); } }
+
+/* ------------------------------------------------------------------ действия, подсказки, близость */
+let hintT = 0;
+function hint(t) { const h = $('#hint'); h.textContent = t; h.hidden = false; h.style.opacity = '1'; clearTimeout(hintT); hintT = setTimeout(() => { h.style.opacity = '0'; setTimeout(() => { h.hidden = true; }, 400); }, 4200); }
+function renderActions() {
+  const bar = $('#actbar'); bar.innerHTML = ''; if (mode !== 'gl') return;
+  const btn = (t, f) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'hbtn'; b.textContent = t; b.addEventListener('click', f); bar.appendChild(b); };
+  if (S.tower) btn('Спуститься с башни · F', leaveTower);
+  else if (nearPlace && nearPlace.id === 'tower' && Math.hypot(S.x - nearPlace.x, S.z - nearPlace.y) < 14) btn('Подняться на башню · F', climbTower);
+  if (!S.tower && nearView && !auto) btn('Панорама 360° здесь', () => openPano(nearView));
+}
+function updateNear(force) {
+  let best = null, bd = 1e9;
+  for (const p of places) { const d = Math.hypot(p.x - S.x, p.y - S.z); if (d < p.r && d < bd) { bd = d; best = p; } }
+  let nv = null; if (GEO) for (const v of VIEWS) { const q = GEO.vp[v.n]; if (Math.hypot(q[0] - S.x, q[1] - S.z) < 9) nv = v.n; }
+  const chg = best !== nearPlace || nv !== nearView; nearPlace = best; nearView = nv;
+  if (!auto || auto.r.id === 'go') { if (chg || force) showCard(best, false); }
+  if (chg || force) renderActions();
+}
+let lastUI = 0, lastNear = 0;
+function frameUI(now) {
+  if (now - lastUI > 66) { lastUI = now; drawMini(); drawCompass(S.yaw); $('#zone').textContent = S.tower ? 'Смотровая башня, 18 м' : zoneAt(S.x, S.z); }
+  if (now - lastNear > 250) { lastNear = now; updateNear(); }
+}
+
+/* ------------------------------------------------------------------ ввод */
+let dragging = false, dragId = null, dragX = 0, dragY = 0, dragT = 0, dragMoved = 0;
+function bindInput() {
+  const view = $('#view');
+  addEventListener('keydown', (e) => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if (!$('#start').hidden) { if (e.code === 'Enter' && !$('#go').disabled) begin(); return; }
+    const code = e.code;
+    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyQ', 'KeyE', 'ShiftLeft', 'ShiftRight'].includes(code)) { keys.add(code); if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown'].includes(code)) takeControl(); if (code.startsWith('Arrow')) e.preventDefault(); }
+    else if (code === 'KeyM') openBig($('#bigmap').hidden);
+    else if (code === 'KeyF') { if (S.tower) leaveTower(); else if (nearPlace && nearPlace.id === 'tower') climbTower(); else if (nearPlace) showCard(nearPlace, true); }
+    else if (code === 'Space') { if (auto) { auto.paused = !auto.paused; updateRouteBar(); e.preventDefault(); } }
+    else if (code === 'Escape') { if (!$('#bigmap').hidden) openBig(false); else if (mode === 'pano' && park) closePano(); else if (auto) takeControl(); else closePanels(); }
+  });
+  addEventListener('keyup', (e) => keys.delete(e.code));
+  addEventListener('blur', () => keys.clear());
+  view.addEventListener('pointerdown', (e) => { if (mode !== 'gl') return; dragging = true; dragId = e.pointerId; dragX = e.clientX; dragY = e.clientY; dragT = performance.now(); dragMoved = 0; view.classList.add('drag'); try { view.setPointerCapture(e.pointerId); } catch (_) { } });
+  view.addEventListener('pointermove', (e) => { if (!dragging || e.pointerId !== dragId) return; const dx = e.clientX - dragX, dy = e.clientY - dragY; dragX = e.clientX; dragY = e.clientY; dragMoved += Math.abs(dx) + Math.abs(dy); const k = 0.0042 * (park.camera.fov / 70); S.yaw -= dx * k; S.pitch = clamp(S.pitch + dy * k, -1.25, 1.2); setCamera(); });
+  const end = (e) => { if (!dragging || e.pointerId !== dragId) return; dragging = false; view.classList.remove('drag'); if (dragMoved < 6 && performance.now() - dragT < 400) clickGround(e); };
+  view.addEventListener('pointerup', end); view.addEventListener('pointercancel', () => { dragging = false; view.classList.remove('drag'); });
+  view.addEventListener('wheel', (e) => { if (mode !== 'gl') return; e.preventDefault(); park.camera.fov = clamp(park.camera.fov + Math.sign(e.deltaY) * 4, 35, 85); park.camera.updateProjectionMatrix(); park.dirty = true; }, { passive: false });
+  // джойстик
+  const J = $('#joy'), knob = J.querySelector('i'); let jid = null;
+  const jmove = (e) => { const r = J.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2; let x = (e.clientX - cx) / (r.width / 2), y = (e.clientY - cy) / (r.height / 2); const L = Math.hypot(x, y); if (L > 1) { x /= L; y /= L; } joy = { x, y, on: true }; knob.style.transform = `translate(${x * 38}px,${y * 38}px)`; };
+  J.addEventListener('pointerdown', (e) => { jid = e.pointerId; J.setPointerCapture(e.pointerId); takeControl(); jmove(e); e.stopPropagation(); });
+  J.addEventListener('pointermove', (e) => { if (e.pointerId === jid) jmove(e); });
+  const jend = (e) => { if (e.pointerId !== jid) return; jid = null; joy = { x: 0, y: 0, on: false }; knob.style.transform = ''; };
+  J.addEventListener('pointerup', jend); J.addEventListener('pointercancel', jend);
+  // кнопки
+  $('#bRoutes').addEventListener('click', () => togglePanel('pRoutes', 'bRoutes'));
+  $('#bEnv').addEventListener('click', () => togglePanel('pEnv', 'bEnv'));
+  $('#bMap').addEventListener('click', () => openBig($('#bigmap').hidden));
+  $('#minibox').addEventListener('click', () => openBig(true));
+  $('#minibox').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openBig(true); } });
+  $('#bigmap').addEventListener('click', (e) => { if (e.target.id === 'bigmap') openBig(false); });
+  $('#big').addEventListener('click', (e) => {
+    const cv = $('#big'), r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * MAPW, y = (e.clientY - r.top) / r.height * MAPH;
+    if (mode === 'pano') { let best = null, bd = 18; for (const v of VIEWS) { const p = GEO.vp[v.n], d = Math.hypot(p[0] - x, p[1] - y); if (d < bd) { bd = d; best = v.n; } } if (best) { openBig(false); loadPano(best); } return; }
+    let pl = null, bd = 10; for (const p of places) { const d = Math.hypot(p.x - x, p.y - y); if (d < bd) { bd = d; pl = p; } }
+    openBig(false);
+    if (pl) { teleport(pl.stand, pl); return; }
+    if (!blocked(x, y)) teleport([x, y], null, true); else { const n = nav.nodes[nav.nearest(x, y)]; teleport(n, { x, y }); }
+  });
+  $('#bHelp').addEventListener('click', () => { $('#start').hidden = false; $('#go').textContent = 'Продолжить прогулку'; $('#go').disabled = false; });
+  $('#bFull').addEventListener('click', () => { const el = document.documentElement; try { if (document.fullscreenElement) document.exitFullscreen(); else if (el.requestFullscreen) el.requestFullscreen().catch(() => hint('Полный экран здесь недоступен')); else hint('Полный экран здесь недоступен'); } catch (_) { hint('Полный экран здесь недоступен'); } });
+  $('#bPano').addEventListener('click', () => { if (mode === 'pano') { if (park) closePano(); } else openPano(nearestView()); });
+  $('#rtPause').addEventListener('click', () => { if (auto) { auto.paused = !auto.paused; updateRouteBar(); } });
+  $('#rtNext').addEventListener('click', () => { if (!auto) return; if (auto.phase === 'move') { auto.s = auto.len; } else nextStop(); });
+  $('#rtSpeed').addEventListener('click', () => { autoSpeed = autoSpeed === 1 ? 2 : autoSpeed === 2 ? 4 : 1; updateRouteBar(); });
+  $('#rtStop').addEventListener('click', () => { auto = null; updateRouteBar(); showCard(null); });
+  const seg = (id, cur, f) => { const el = $(id); const sync = (v) => el.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === String(v)))); sync(cur); el.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; f(b.dataset.v); sync(b.dataset.v); }); };
+  seg('#sSeason', 0, (v) => park && park.setEnv({ season: +v }));
+  seg('#sTod', 0, (v) => park && park.setEnv({ tod: +v }));
+  seg('#sStage', 7, (v) => park && park.setStage(+v, true));
+  seg('#sPace', S.pace, (v) => { S.pace = +v; store.set('pace', v); });
+  seg('#sQual', store.get('q') === '0' ? 0 : 1, (v) => { store.set('q', v); setQuality(+v); });
+  addEventListener('message', (e) => { const d = e.data || {}; if (d.type === 'walk-pause') { hostPaused = true; keys.clear(); joy = { x: 0, y: 0, on: false }; } if (d.type === 'walk-resume') { hostPaused = false; lastT = performance.now(); if (park) park.dirty = true; } if (d.type === 'walk-route') { const r = ROUTES.find(q => q.id === d.id); if (r && mode === 'gl') { $('#start').hidden = true; begun = true; $('#go').textContent = 'Продолжить прогулку'; startRoute(r, !begun); } } if (d.type === 'walk-place') { const p = placeById[d.id]; if (p && mode === 'gl') { $('#start').hidden = true; begun = true; $('#go').textContent = 'Продолжить прогулку'; teleport(p.stand, p); } } });
+}
+function setQuality(hi) { if (!park) return; park.renderer.setPixelRatio(hi ? Math.min(devicePixelRatio || 1, 1.75) : Math.min(devicePixelRatio || 1, 1) * (COARSE ? 0.75 : 0.85)); park.resize(); }
+function togglePanel(id, bid) { const el = $('#' + id), on = el.hidden; closePanels(); el.hidden = !on; $('#' + bid).setAttribute('aria-pressed', String(on)); }
+function closePanels(except) { for (const [p, b] of [['pRoutes', 'bRoutes'], ['pEnv', 'bEnv']]) { $('#' + p).hidden = true; $('#' + b).setAttribute('aria-pressed', 'false'); } if (except !== 'map' && !$('#bigmap').hidden) openBig(false); }
+function clickGround(e) {
+  const r = park.renderer.domElement.getBoundingClientRect(), T = THREE;
+  const v = new T.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+  const rc = new T.Raycaster(); rc.setFromCamera(v, park.camera);
+  const hits = rc.intersectObjects([park.terrain.mesh, park.structures].filter(Boolean), false); if (!hits.length) return;
+  const h = hits[0].point, x = h.x, y = h.z;
+  let pl = null, bd = 9; for (const p of places) { const d = Math.hypot(p.x - x, p.y - y); if (d < bd) { bd = d; pl = p; } }
+  if (pl && Math.hypot(pl.x - S.x, pl.y - S.z) > pl.want + 2) { walkTo(pl.stand, pl); return; }
+  if (blocked(x, y)) { hint('Туда не пройти: вода или постройка'); return; }
+  if (Math.hypot(x - S.x, y - S.z) < 1) return;
+  if (Math.hypot(x - S.x, y - S.z) < 30) { auto = { r: { id: 'go', t: '', stops: ['__go'] }, i: 0, phase: 'move', t: 0, paused: false, go: { stand: [x, y], x: x + Math.cos(S.yaw) * 5, y: y + Math.sin(S.yaw) * 5 }, quiet: true, path: [[S.x, S.z], [x, y]], len: Math.hypot(x - S.x, y - S.z), s: 0 }; }
+  else walkTo([x, y]);
+}
+
+/* ------------------------------------------------------------------ панорамы */
+const panoState = { n: 0, yaw: 0 }; let p2 = null;
+function nearestView() { let b = 8, bd = 1e9; for (const v of VIEWS) { const q = GEO.vp[v.n], d = Math.hypot(q[0] - S.x, q[1] - S.z); if (d < bd) { bd = d; b = v.n; } } return b; }
+function openPano(n) {
+  closePanels(); auto = null; updateRouteBar();
+  mode = 'pano'; $('#pano').hidden = false; $('#joy').hidden = true; $('#actbar').innerHTML = ''; $('#cross').hidden = true; $('#bPano').setAttribute('aria-pressed', 'true');
+  if (park) park.paused = true;
+  if (!p2) { p2 = new Pano2D($('#pano'), { autorotate: false, onMove: (yaw) => { panoState.yaw = yaw * Math.PI / 180; drawHops(); drawMini(); drawCompass(GEO.head[panoState.n] + panoState.yaw); } }); if (p2.failed) { $('#pano').innerHTML = '<p style="padding:80px 20px;text-align:center">Этот браузер не умеет рисовать на canvas.</p>'; return; } p2.attach(); }
+  loadPano(n);
+}
+function closePano() {
+  mode = 'gl'; $('#pano').hidden = true; $('#hop').hidden = true; $('#bPano').setAttribute('aria-pressed', 'false'); $('#joy').hidden = !COARSE; $('#cross').hidden = COARSE;
+  if (park) { park.paused = false; park.dirty = true; } showCard(null); updateNear(true);
+}
+function loadPano(n) {
+  const v = VIEWS.find(q => q.n === n); if (!v) return; panoState.n = n; panoState.yaw = 0;
+  const q = GEO.vp[n]; S.x = q[0]; S.z = q[1];
+  $('#zone').textContent = v.name; showCard({ id: 'pano' + n, title: v.n + '. ' + v.name, text: v.text || 'Панорама 360°: потяните, чтобы осмотреться. Внизу — соседние точки съёмки.', ey: 'Панорама 360°', still: 0 }, true);
+  const row = $('#cardRow'); if (park) { const b = document.createElement('button'); b.type = 'button'; b.className = 'cbtn pri'; b.textContent = 'Вернуться к прогулке'; b.addEventListener('click', () => { closePano(); if (n === 9) climbTower(); else teleport([q[0], q[1]], null, true); }); row.appendChild(b); }
+  p2.load('img/pano_' + n + '.jpg', { yaw: 0, pitch: 0, fov: 75, fade: true }).then(() => { drawHops(); drawMini(); drawCompass(GEO.head[n]); }).catch(() => hint('Панорама не загрузилась, попробуйте другую точку'));
+  const hop = $('#hop'); hop.hidden = false;
+  const cur = GEO.vp[n]; const nb = VIEWS.filter(w => w.n !== n).map(w => ({ w, d: Math.hypot(GEO.vp[w.n][0] - cur[0], GEO.vp[w.n][1] - cur[1]), a: Math.atan2(GEO.vp[w.n][1] - cur[1], GEO.vp[w.n][0] - cur[0]) })).sort((a, b) => a.d - b.d).slice(0, 4);
+  hop.innerHTML = ''; panoState.nb = nb;
+  for (const it of nb) { const b = document.createElement('button'); b.type = 'button'; b.className = 'hop'; b.innerHTML = ICON_ARROW + `<span>${it.w.name}</span><small>${fmtN(it.d)} м</small>`; b.addEventListener('click', () => loadPano(it.w.n)); hop.appendChild(b); it.el = b; }
+  drawHops();
+}
+function drawHops() { if (!panoState.nb) return; const head = (GEO.head[panoState.n] || 0) + panoState.yaw; for (const it of panoState.nb) { const rel = wrapA(it.a - head); it.el.querySelector('svg').style.transform = `rotate(${rel * 180 / Math.PI}deg)`; } }
+
+/* ------------------------------------------------------------------ старт */
+let startSel = 'gate';
+function buildStartUI() {
+  const box = $('#starts'); box.innerHTML = '';
+  const add = (id, t, d, kind) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sbtn' + (id === startSel ? ' sel' : ''); b.dataset.id = id; b.dataset.kind = kind; b.innerHTML = `<b>${t}</b><span>${d}</span>`; b.addEventListener('click', () => { startSel = id; box.querySelectorAll('.sbtn').forEach(x => x.classList.toggle('sel', x === b)); }); b.addEventListener('dblclick', begin); box.appendChild(b); };
+  if (mode === 'pano') { for (const v of VIEWS) add('v' + v.n, v.n + '. ' + v.name, 'панорама 360°', 'v'); startSel = 'v8'; box.querySelectorAll('.sbtn').forEach(x => x.classList.toggle('sel', x.dataset.id === 'v8')); return; }
+  for (const s of STARTS) add(s.id, s.t, s.d, 'p');
+  for (const r of ROUTES) add('r:' + r.id, 'Маршрут «' + r.t + '»', routeInfo(r), 'r');
+}
+function routeInfo(r) {
+  let L = 0; for (let i = 0; i < r.stops.length - 1; i++) { const a = placeById[r.stops[i]], b = placeById[r.stops[i + 1]]; if (a && b) L += polyLen(navPath(a.stand, b.stand)); }
+  r.len = L; const min = Math.round(L / 1.25 / 60 + r.stops.length * 1.5);
+  return (L < 1000 ? fmtN(L) + ' м' : (L / 1000).toFixed(1).replace('.', ',') + ' км') + ' · ' + r.stops.length + ' ' + plural(r.stops.length, 'остановка', 'остановки', 'остановок') + ' · около ' + min + ' мин пешком';
+}
+let begun = false, lastStart = null;
+function begin() {
+  if ($('#go').disabled) return; $('#start').hidden = true;
+  if (mode === 'pano') { if (startSel.startsWith('v') && startSel !== lastStart) { lastStart = startSel; loadPano(+startSel.slice(1)); } return; }
+  if (begun && startSel === lastStart) return;
+  begun = true; lastStart = startSel; $('#go').textContent = 'Продолжить прогулку';
+  if (startSel.startsWith('r:')) { startRoute(ROUTES.find(r => r.id === startSel.slice(2)), true); setCamera(); return; }
+  auto = null; updateRouteBar(); S.tower = false;
+  const p = placeById[startSel] || placeById.gate; S.x = p.stand[0]; S.z = p.stand[1]; S.y = groundY(S.x, S.z) + 1.65; S.yaw = Math.atan2(p.y - S.z, p.x - S.x); S.pitch = -0.03; setCamera(); updateNear(true);
+  hint(COARSE ? 'Джойстик слева — идти, проведите по экрану — осмотреться' : 'W A S D — идти, потяните мышью — осмотреться, клик по земле — дойти');
+  try { park.renderer.domElement.focus(); } catch (_) { }
+}
+
+/* ------------------------------------------------------------------ запуск */
+async function boot() {
+  initCompass();
+  if (EMBED) { const b = $('#back'); b.removeAttribute('href'); b.setAttribute('role', 'button'); b.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3l10 10M13 3 3 13"/></svg><span class="tx">Закрыть</span>'; b.addEventListener('click', (e) => { e.preventDefault(); try { window.parent.postMessage({ type: 'walk-close' }, '*'); } catch (_) { } }); }
+  VIEWS = Object.keys(GEO.names).map(Number).filter(n => n !== 5).sort((a, b) => a - b).map(n => ({ n, name: GEO.names[n], text: GEO.texts[n] || '' }));
+  try { M = await (await fetch('model.json')).json(); } catch (e) { $('#go').textContent = 'Модель не загрузилась — обновите страницу'; return; }
+  buildWorld();
+  if (HAS_GL && window.Park3D) {
+    try {
+      park = new Park3D($('#view'), M, { still: !!window.__TEST_STILL });
+      park.flowerScale = 0.32; park.controls.enabled = false; park.controls.update = () => false; park.setShow({ labels: false });
+      park.camera.near = 0.12; park.camera.far = 4000; park.camera.fov = 68; park.camera.updateProjectionMatrix();
+      park.setStage(7, false);
+      const orig = park.loop; park.loop = (t) => { if (park.paused || hostPaused) { requestAnimationFrame(park.loop); return; } update(t); orig(t); };
+      if (store.get('q') === '0') setQuality(0);
+      mode = 'gl'; buildWorld();
+    } catch (e) { console.error(e); park = null; const cv = $('#view canvas'); if (cv) cv.remove(); }
+  }
+  nav = buildNav(); places = makePlaces(); placeById = Object.fromEntries(places.map(p => [p.id, p]));
+  if (mode !== 'gl') {
+    mode = 'pano'; $('#startLead').textContent = 'Этот браузер не показывает живую 3D-сцену, поэтому прогулка идёт по панорамам 360°: выберите точку, осматривайтесь и переходите к соседним точкам кнопками внизу.';
+    $('#keys').innerHTML = '<div><span>мышь или палец</span> потяните, чтобы осмотреться</div><div><span>кнопки внизу</span> переход к соседней точке</div><div><span><kbd>M</kbd></span> карта всех точек</div>';
+    $('#bRoutes').hidden = true; $('#bEnv').hidden = true; $('#bPano').hidden = true;
+    $('#startMsg').hidden = false; $('#startMsg').textContent = 'Живая 3D-прогулка доступна в браузере с WebGL (Chrome, Edge, Safari, Firefox с включённым аппаратным ускорением).';
+    $('#pano').hidden = false; p2 = new Pano2D($('#pano'), { autorotate: false, onMove: (yaw) => { panoState.yaw = yaw * Math.PI / 180; drawHops(); drawMini(); drawCompass(GEO.head[panoState.n] + panoState.yaw); } }); if (!p2.failed) p2.attach();
+  } else {
+    $('#joy').hidden = !COARSE; $('#cross').hidden = COARSE;
+    const g = placeById.gate; S.x = g.stand[0]; S.z = g.stand[1]; S.y = groundY(S.x, S.z) + 1.65; S.yaw = Math.atan2(g.y - S.z, g.x - S.x) + Math.PI; setCamera();
+  }
+  // маршруты
+  const rl = $('#routeList'); for (const r of ROUTES) { const b = document.createElement('button'); b.type = 'button'; b.className = 'route'; b.innerHTML = `<b>${r.t}</b><span>${r.d}</span><em>${mode === 'gl' ? routeInfo(r) : ''}</em>`; b.addEventListener('click', () => startRoute(r, false)); rl.appendChild(b); }
+  buildStartUI(); fillPlaceList();
+  $('#go').disabled = false; $('#go').textContent = mode === 'pano' ? 'Открыть панораму' : 'Начать прогулку';
+  $('#go').addEventListener('click', begin);
+  bindInput(); drawMini();
+  // глубокая ссылка: #letopis, #big, #tales, #water или #rest, #gate …
+  const h = location.hash.replace('#', '');
+  if (h && mode === 'gl') { let ok = false; if (ROUTES.find(r => r.id === h)) { startSel = 'r:' + h; ok = true; } else if (placeById[h]) { startSel = h; ok = true; } buildStartUI(); if (ok) begin(); }
+  if (window.__TEST_AUTOSTART) begin();
+}
+boot();
+</script>
+</body>
+</html>
